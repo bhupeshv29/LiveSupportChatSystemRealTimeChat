@@ -190,10 +190,20 @@ app.get(
   async (req, res) => {
     try {
       const conversationId = String(req.params.id);
+      const isAdmin = req.role === Role.ADMIN;
 
-      const conversation = await prisma.conversation.findUnique({
+      const conversation = await prisma.conversation.findFirst({
         where: {
           id: conversationId,
+          ...(isAdmin
+            ? {}
+            : {
+                OR: [
+                  { candidateId: req.userId },
+                  { agentId: req.userId },
+                  { supervisorId: req.userId },
+                ],
+              }),
         },
         include: {
           candidate: {
@@ -202,7 +212,6 @@ app.get(
               name: true,
             },
           },
-
           agent: {
             select: {
               id: true,
@@ -235,19 +244,6 @@ app.get(
         });
       }
 
-      const isAdmin = req.role === Role.ADMIN;
-
-      const isParticipant =
-        req.userId === conversation.candidateId ||
-        req.userId === conversation.agentId ||
-        req.userId === conversation.supervisorId;
-
-      if (!isAdmin && !isParticipant) {
-        return res.status(403).json({
-          message: "You are not authorized to access this conversation",
-        });
-      }
-
       return res.status(200).json({
         id: conversation.id,
         status: conversation.status,
@@ -257,7 +253,7 @@ app.get(
         messages: conversation.message,
       });
     } catch (error) {
-      console.error(error);
+      console.error("Get conversation error:", error);
 
       return res.status(500).json({
         message: "Internal server error",
