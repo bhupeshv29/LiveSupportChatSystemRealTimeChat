@@ -36,7 +36,7 @@ wss.on("connection", (ws, request) => {
     });
 
     socket.on("message", async (data) => {
-      await handleMessage(socket, data as Buffer);
+      await handleMessage(socket, data);
     });
 
     socket.on("close", () => {

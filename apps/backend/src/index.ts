@@ -5,9 +5,15 @@ import { loginSchema, SignupSchema } from "./validation/authSchema";
 import jwt from "jsonwebtoken";
 import "dotenv/config";
 import AuthMiddleware, { RequiredRole } from "./middleware/auth.middleware";
+import cors from "cors";
 
 const app = express();
 app.use(express.json());
+app.use(
+  cors({
+    origin: "*",
+  }),
+);
 
 const PORT = Number(process.env.PORT || 3000);
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -138,6 +144,135 @@ app.get("/auth/me", AuthMiddleware, async (req: Request, res: Response) => {
     role: users.role,
   });
 });
+
+const conversationInclude = {
+  candidate: { select: { id: true, name: true } },
+  agent: { select: { id: true, name: true } },
+};
+
+app.get(
+  "/candidate/conversations",
+  AuthMiddleware,
+  RequiredRole(Role.CANDIDATE),
+  async (req: Request, res: Response) => {
+    const conversations = await prisma.conversation.findMany({
+      where: { candidateId: req.userId },
+      orderBy: { createdAt: "desc" },
+      include: conversationInclude,
+    });
+    return res.json(conversations);
+  },
+);
+
+app.get(
+  "/agent/conversations",
+  AuthMiddleware,
+  RequiredRole(Role.AGENT),
+  async (req: Request, res: Response) => {
+    const conversations = await prisma.conversation.findMany({
+      where: { agentId: req.userId },
+      orderBy: { createdAt: "desc" },
+      include: conversationInclude,
+    });
+    return res.json(conversations);
+  },
+);
+
+app.get(
+  "/supervisor/conversations",
+  AuthMiddleware,
+  RequiredRole(Role.SUPERVISOR),
+  async (req: Request, res: Response) => {
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        OR: [
+          { status: ConversationStatus.OPEN, supervisorId: null },
+          { supervisorId: req.userId },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      include: conversationInclude,
+    });
+    return res.json(conversations);
+  },
+);
+
+app.get(
+  "/supervisor/agents",
+  AuthMiddleware,
+  RequiredRole(Role.SUPERVISOR),
+  async (req: Request, res: Response) => {
+    const assignments = await prisma.supervisorAgent.findMany({
+      where: { supervisorId: req.userId },
+      include: { agent: { select: { id: true, name: true, email: true } } },
+    });
+    return res.json(assignments.map((assignment) => assignment.agent));
+  },
+);
+
+app.get(
+  "/admin/supervisors",
+  AuthMiddleware,
+  RequiredRole(Role.ADMIN),
+  async (_req: Request, res: Response) => {
+    const supervisors = await prisma.user.findMany({
+      where: { role: Role.SUPERVISOR },
+      orderBy: { name: "asc" },
+      include: {
+        supervisorAgents: {
+          include: { agent: { select: { id: true, name: true, email: true } } },
+        },
+      },
+    });
+    return res.json(
+      supervisors.map((supervisor) => ({
+        id: supervisor.id,
+        name: supervisor.name,
+        email: supervisor.email,
+        agents: supervisor.supervisorAgents.map((item) => item.agent),
+      })),
+    );
+  },
+);
+
+app.get(
+  "/admin/agents",
+  AuthMiddleware,
+  RequiredRole(Role.ADMIN),
+  async (_req: Request, res: Response) => {
+    const agents = await prisma.user.findMany({
+      where: { role: Role.AGENT },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, email: true },
+    });
+    return res.json(agents);
+  },
+);
+
+app.post(
+  "/admin/supervisors/:supervisorId/agents",
+  AuthMiddleware,
+  RequiredRole(Role.ADMIN),
+  async (req: Request, res: Response) => {
+    const supervisorId = String(req.params.supervisorId);
+    const agentId = req.body.agentId as string | undefined;
+    if (!agentId)
+      return res.status(400).json({ message: "agentId is required" });
+    const [supervisor, agent] = await Promise.all([
+      prisma.user.findFirst({
+        where: { id: supervisorId, role: Role.SUPERVISOR },
+      }),
+      prisma.user.findFirst({ where: { id: agentId, role: Role.AGENT } }),
+    ]);
+    if (!supervisor || !agent)
+      return res.status(404).json({ message: "Supervisor or agent not found" });
+    await prisma.$transaction(async (tx) => {
+      await tx.supervisorAgent.deleteMany({ where: { agentId } });
+      await tx.supervisorAgent.create({ data: { supervisorId, agentId } });
+    });
+    return res.status(201).json({ supervisorId, agentId });
+  },
+);
 
 //conversation
 //candidate only

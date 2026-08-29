@@ -1,4 +1,5 @@
 import type { ClientEvent, ServerEvent } from "@repo/common/types";
+import type { RawData } from "ws";
 
 import { prisma, ConversationStatus, Role } from "@repo/db/client";
 
@@ -108,6 +109,13 @@ async function handleJoinConversation(
   }
 
   joinRoom(conversationId, ws);
+
+  sendEvent(ws, {
+    event: "CONVERSATION_JOINED",
+    data: {
+      conversationId,
+    },
+  });
 }
 
 /**
@@ -308,9 +316,12 @@ async function handleLeaveConversation(
 /**
  * Main WS event handler
  */
-export async function handleMessage(ws: AuthenticatedSocket, rawData: Buffer) {
+export async function handleMessage(ws: AuthenticatedSocket, rawData: RawData) {
   try {
-    const message = JSON.parse(rawData.toString()) as ClientEvent;
+    const text = Array.isArray(rawData)
+      ? Buffer.concat(rawData).toString()
+      : Buffer.from(rawData).toString();
+    const message = JSON.parse(text) as ClientEvent;
 
     switch (message.event) {
       case "JOIN_CONVERSATION":

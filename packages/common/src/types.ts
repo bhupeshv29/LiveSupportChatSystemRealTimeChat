@@ -29,6 +29,12 @@ export type ClientEvent =
 
 export type ServerEvent =
   | {
+      event: "CONVERSATION_JOINED";
+      data: {
+        conversationId: string;
+      };
+    }
+  | {
       event: "NEW_MESSAGE";
       data: {
         conversationId: string;
