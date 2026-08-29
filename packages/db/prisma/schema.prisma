@@ -39,10 +39,11 @@ model Conversation {
 
   status ConversationStatus @default(OPEN)
 
-  createdAt   DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  assignedAt DateTime?
-  closedAt   DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  supervisorAssignedAt DateTime?
+  agentAssignedAt      DateTime?
+  closedAt             DateTime?
 
   candidate  User  @relation("candidateConversations", fields: [candidateId], references: [id])
   supervisor User? @relation("supervisorConversations", fields: [supervisorId], references: [id])
