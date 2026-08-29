@@ -139,6 +139,9 @@ app.get("/auth/me", AuthMiddleware, async (req: Request, res: Response) => {
   });
 });
 
+
+
+
 //conversation
 //candidate only
 app.post(
@@ -263,12 +266,135 @@ app.get(
 );
 
 //supervisor only
-app.post("/conversation/:id/assign");
+app.post(
+  "/conversation/:id/claim",
+  AuthMiddleware,
+  RequiredRole(Role.SUPERVISOR),
+  async (req, res) => {
+    try {
+      const supervisorId = req.userId;
+      const conversationId = req.params.id as string;
 
-//close conversatio using ws
+      const result = await prisma.conversation.updateMany({
+        where: {
+          id: conversationId,
+          supervisorId: null,
+          status: "OPEN",
+        },
+        data: {
+          supervisorId,
+          assignedAt: new Date(),
+        },
+      });
+
+      if (result.count === 0) {
+        return res.status(409).json({
+          message: "Conversation is already claimed or unavailable",
+        });
+      }
+
+      const conversation = await prisma.conversation.findUnique({
+        where: {
+          id: conversationId,
+        },
+        select: {
+          id: true,
+          candidateId: true,
+          supervisorId: true,
+          agentId: true,
+          status: true,
+          assignedAt: true,
+        },
+      });
+
+      return res.status(200).json(conversation);
+    } catch (error) {
+      console.error(error);
+
+      return res.status(500).json({
+        message: "Internal server error",
+      });
+    }
+  },
+);
+
+//close conversation using ws
 
 // admin only
-app.get("/admin/analytics");
+app.get(
+  "/admin/analytics",
+  AuthMiddleware,
+  RequiredRole(Role.ADMIN),
+  async (req, res) => {
+    try {
+      const [
+        totalConversations,
+        openConversations,
+        closedConversations,
+        supervisors,
+      ] = await Promise.all([
+        // Total conversations
+        prisma.conversation.count(),
+
+        // Open conversations
+        prisma.conversation.count({
+          where: {
+            status: "OPEN",
+          },
+        }),
+
+        // Closed conversations
+        prisma.conversation.count({
+          where: {
+            status: "CLOSE",
+          },
+        }),
+
+        // Supervisor analytics
+        prisma.user.findMany({
+          where: {
+            role: "SUPERVISOR",
+          },
+          select: {
+            id: true,
+            name: true,
+
+            supervisorAgents: {
+              select: {
+                agentId: true,
+              },
+            },
+
+            supervisorConversations: {
+              select: {
+                id: true,
+              },
+            },
+          },
+        }),
+      ]);
+
+      return res.status(200).json({
+        totalConversations,
+        openConversations,
+        closedConversations,
+
+        supervisors: supervisors.map((supervisor) => ({
+          id: supervisor.id,
+          name: supervisor.name,
+          agentCount: supervisor.supervisorAgents.length,
+          conversationCount: supervisor.supervisorConversations.length,
+        })),
+      });
+    } catch (error) {
+      console.error(error);
+
+      return res.status(500).json({
+        message: "Internal server error",
+      });
+    }
+  },
+);
 
 app.listen(PORT, () => {
   console.log(`server is running ${PORT}`);

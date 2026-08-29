@@ -1,0 +1,86 @@
+// This is your Prisma schema file
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  email         String   @unique
+  password_hash String
+  role          Role
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  candidateConversations  Conversation[] @relation("candidateConversations")
+  supervisorConversations Conversation[] @relation("supervisorConversations")
+  agentConversations      Conversation[] @relation("agentConversations")
+
+  supervisorAgents SupervisorAgent[] @relation("SupervisorAgent")
+  agentSupervisor  SupervisorAgent[] @relation("AgentSupervisor")
+
+  messages Message[]
+}
+
+model Conversation {
+  id           String  @id @default(uuid())
+  candidateId  String
+  supervisorId String?
+  agentId      String?
+
+  status ConversationStatus @default(OPEN)
+
+  createdAt   DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  assignedAt DateTime?
+  closedAt   DateTime?
+
+  candidate  User  @relation("candidateConversations", fields: [candidateId], references: [id])
+  supervisor User? @relation("supervisorConversations", fields: [supervisorId], references: [id])
+  agent      User? @relation("agentConversations", fields: [agentId], references: [id])
+
+  message Message[]
+}
+
+model Message {
+  id             String @id @default(uuid())
+  conversationId String
+  senderId       String
+  content        String
+
+  createdAt DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  sender       User         @relation(fields: [senderId], references: [id])
+}
+
+model SupervisorAgent {
+  supervisorId String
+  agentId      String
+
+  supervisor User @relation("SupervisorAgent", fields: [supervisorId], references: [id])
+  agent      User @relation("AgentSupervisor", fields: [agentId], references: [id])
+
+  @@id([supervisorId, agentId])
+}
+
+enum Role {
+  CANDIDATE
+  AGENT
+  SUPERVISOR
+  ADMIN
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSE
+}

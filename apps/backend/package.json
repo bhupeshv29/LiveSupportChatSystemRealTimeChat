@@ -4,21 +4,27 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@repo/db": "workspace:*",
+    "@repo/common": "workspace:*"
   },
   "scripts": {
-    "dev":"bun run src/index.ts"
+    "dev": "bun run src/index.ts"
   },
   "peerDependencies": {
     "typescript": "^7"
   },
   "dependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "backend": "workspace:*",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "zod": "^4.5.2"
   }
 }
