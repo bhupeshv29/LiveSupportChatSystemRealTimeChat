@@ -12,7 +12,7 @@ app.use(express.json());
 const PORT = Number(process.env.PORT || 3000);
 const JWT_SECRET = process.env.JWT_SECRET;
 
-app.get("/health", (_req, res) => {
+app.get("/health", (_req: Request, res: Response) => {
   res.json("ok");
 });
 
@@ -139,16 +139,13 @@ app.get("/auth/me", AuthMiddleware, async (req: Request, res: Response) => {
   });
 });
 
-
-
-
 //conversation
 //candidate only
 app.post(
   "/conversation",
   AuthMiddleware,
   RequiredRole("CANDIDATE"),
-  async (req, res) => {
+  async (req: Request, res: Response) => {
     try {
       const existingConversation = await prisma.conversation.findFirst({
         where: {
@@ -190,7 +187,7 @@ app.get(
   "/conversation/:id",
   AuthMiddleware,
   RequiredRole(Role.ADMIN, Role.AGENT, Role.CANDIDATE, Role.SUPERVISOR),
-  async (req, res) => {
+  async (req: Request, res: Response) => {
     try {
       const conversationId = String(req.params.id);
       const isAdmin = req.role === Role.ADMIN;
@@ -267,35 +264,65 @@ app.get(
 
 //supervisor only
 app.post(
-  "/conversation/:id/claim",
+  "/conversation/:id/assign",
   AuthMiddleware,
   RequiredRole(Role.SUPERVISOR),
   async (req, res) => {
     try {
       const supervisorId = req.userId;
-      const conversationId = req.params.id as string;
+      const conversationId = req.params.id;
+      const { agentId } = req.body;
 
-      const result = await prisma.conversation.updateMany({
-        where: {
-          id: conversationId,
-          supervisorId: null,
-          status: "OPEN",
-        },
-        data: {
-          supervisorId,
-          assignedAt: new Date(),
-        },
-      });
-
-      if (result.count === 0) {
-        return res.status(409).json({
-          message: "Conversation is already claimed or unavailable",
+      // 1. Validate request
+      if (!agentId) {
+        return res.status(400).json({
+          message: "agentId is required",
         });
       }
 
+      // 2. Verify that this agent belongs to this supervisor
+      const supervisorAgent = await prisma.supervisorAgent.findUnique({
+        where: {
+          supervisorId_agentId: {
+            supervisorId,
+            agentId,
+          },
+        },
+      });
+
+      if (!supervisorAgent) {
+        return res.status(403).json({
+          message: "Agent does not belong to this supervisor",
+        });
+      }
+
+      // 3. Atomically claim conversation + assign agent
+      const result = await prisma.conversation.updateMany({
+        where: {
+          id: conversationId as string,
+          status: "OPEN",
+          supervisorId: null,
+          agentId: null,
+        },
+        data: {
+          supervisorId,
+          agentId,
+          supervisorAssignedAt: new Date(),
+          agentAssignedAt: new Date(),
+        },
+      });
+
+      // 4. Nobody else was able to claim it
+      if (result.count === 0) {
+        return res.status(409).json({
+          message: "Conversation is already assigned",
+        });
+      }
+
+      // 5. Return updated conversation
       const conversation = await prisma.conversation.findUnique({
         where: {
-          id: conversationId,
+          id: conversationId as string,
         },
         select: {
           id: true,
@@ -303,7 +330,8 @@ app.post(
           supervisorId: true,
           agentId: true,
           status: true,
-          assignedAt: true,
+          supervisorAssignedAt: true,
+          agentAssignedAt: true,
         },
       });
 
@@ -317,7 +345,6 @@ app.post(
     }
   },
 );
-
 //close conversation using ws
 
 // admin only
@@ -325,7 +352,7 @@ app.get(
   "/admin/analytics",
   AuthMiddleware,
   RequiredRole(Role.ADMIN),
-  async (req, res) => {
+  async (req: Request, res: Response) => {
     try {
       const [
         totalConversations,
