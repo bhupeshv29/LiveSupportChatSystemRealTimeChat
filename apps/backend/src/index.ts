@@ -280,17 +280,18 @@ app.post(
         });
       }
 
-      // 2. Verify that this agent belongs to this supervisor
-      const supervisorAgent = await prisma.supervisorAgent.findUnique({
+      const agent = await prisma.user.findFirst({
         where: {
-          supervisorId_agentId: {
-            supervisorId,
-            agentId,
-          },
+          id: agentId,
+          role: Role.AGENT,
+          supervisorId,
+        },
+        select: {
+          id: true,
         },
       });
 
-      if (!supervisorAgent) {
+      if (!agent) {
         return res.status(403).json({
           message: "Agent does not belong to this supervisor",
         });
@@ -312,7 +313,7 @@ app.post(
         },
       });
 
-      // 4. Nobody else was able to claim it
+      // 4. Nobody else was able to claim it (it result.count==1 then someone already updated it )
       if (result.count === 0) {
         return res.status(409).json({
           message: "Conversation is already assigned",
@@ -345,7 +346,446 @@ app.post(
     }
   },
 );
+
+//Supervisor sees open/closed conversations
+
+app.get(
+  "/supervisor/conversations",
+  AuthMiddleware,
+  RequiredRole(Role.SUPERVISOR),
+  async (req, res) => {
+    try {
+      const supervisorId = req.userId;
+
+      const conversations = await prisma.conversation.findMany({
+        where: {
+          OR: [
+            // New requests waiting for a supervisor
+            {
+              status: ConversationStatus.OPEN,
+              supervisorId: null,
+            },
+
+            // Conversations already assigned to this supervisor
+            {
+              supervisorId,
+            },
+          ],
+        },
+
+        include: {
+          candidate: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+
+          agent: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+
+          supervisor: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      return res.status(200).json({
+        conversations,
+      });
+    } catch (error) {
+      console.error("Supervisor conversations error:", error);
+
+      return res.status(500).json({
+        message: "Internal server error",
+      });
+    }
+  },
+);
+
+//agents sees open/closed conversations
+
+app.get(
+  "/agent/conversations",
+  AuthMiddleware,
+  RequiredRole(Role.AGENT),
+  async (req, res) => {
+    try {
+      const agentId = req.userId;
+
+      const conversations = await prisma.conversation.findMany({
+        where: {
+          agentId,
+          status: ConversationStatus.OPEN,
+        },
+
+        include: {
+          candidate: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+
+          supervisor: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+
+        orderBy: {
+          updatedAt: "desc",
+        },
+      });
+
+      return res.status(200).json({
+        conversations,
+      });
+    } catch (error) {
+      console.error("Agent conversations error:", error);
+
+      return res.status(500).json({
+        message: "Internal server error",
+      });
+    }
+  },
+);
+
 //close conversation using ws
+
+//admin gets all the agents
+app.get(
+  "/admin/agents",
+  AuthMiddleware,
+  RequiredRole(Role.ADMIN),
+  async (req, res) => {
+    try {
+      const agents = await prisma.user.findMany({
+        where: {
+          role: Role.AGENT,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          supervisorId: true,
+          supervisor: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+
+      return res.status(200).json({
+        agents,
+      });
+    } catch (error) {
+      console.error(error);
+
+      return res.status(500).json({
+        message: "Internal server error",
+      });
+    }
+  },
+);
+
+// admin gets all the supervisor
+app.get(
+  "admin/supervisors",
+  AuthMiddleware,
+  RequiredRole(Role.ADMIN),
+  async (req, res) => {
+    try {
+      const supervisors = await prisma.user.findMany({
+        where: {
+          role: Role.AGENT,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          supervisorId: true,
+          supervisor: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+
+      if (!supervisors) {
+        return res.json("no supervisor is available");
+      }
+
+      res.json({ supervisors });
+    } catch (error) {
+      res.json("someting went wrong");
+    }
+  },
+);
+
+// assignment of agent to 1 supervisor (1-1 relation)
+app.post(
+  "/admin/supervisors/:supervisorId/agents/:agentId",
+  AuthMiddleware,
+  RequiredRole(Role.ADMIN),
+  async (req, res) => {
+    try {
+      const supervisorId = req.params.supervisorId as string;
+      const agentId = req.params.agentId as string;
+
+      // Check supervisor
+      const supervisor = await prisma.user.findUnique({
+        where: {
+          id: supervisorId,
+        },
+        select: {
+          id: true,
+          role: true,
+        },
+      });
+
+      if (!supervisor) {
+        return res.status(404).json({
+          message: "Supervisor not found",
+        });
+      }
+
+      if (supervisor.role !== Role.SUPERVISOR) {
+        return res.status(400).json({
+          message: "User is not a supervisor",
+        });
+      }
+
+      // Atomically assign the agent only if
+      // the agent currently has no supervisor.
+      const result = await prisma.user.updateMany({
+        where: {
+          id: agentId,
+          role: Role.AGENT,
+          supervisorId: null,
+        },
+        data: {
+          supervisorId,
+        },
+      });
+
+      if (result.count === 0) {
+        // Determine whether agent exists
+        const agent = await prisma.user.findUnique({
+          where: {
+            id: agentId,
+          },
+          select: {
+            id: true,
+            role: true,
+            supervisorId: true,
+          },
+        });
+
+        if (!agent) {
+          return res.status(404).json({
+            message: "Agent not found",
+          });
+        }
+
+        if (agent.role !== Role.AGENT) {
+          return res.status(400).json({
+            message: "User is not an agent",
+          });
+        }
+
+        return res.status(409).json({
+          message: "Agent is already assigned to a supervisor",
+          supervisorId: agent.supervisorId,
+        });
+      }
+
+      // Return updated agent
+      const agent = await prisma.user.findUnique({
+        where: {
+          id: agentId,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          supervisorId: true,
+        },
+      });
+
+      return res.status(200).json({
+        message: "Agent assigned successfully",
+        agent,
+      });
+    } catch (error) {
+      console.error("Assign agent error:", error);
+
+      return res.status(500).json({
+        message: "Internal server error",
+      });
+    }
+  },
+);
+
+// get all assigned agents of 1 supervisor
+app.get(
+  "/admin/supervisors/:supervisorId/agents",
+  AuthMiddleware,
+  RequiredRole(Role.ADMIN),
+  async (req, res) => {
+    try {
+      const { supervisorId } = req.params;
+
+      const supervisor = await prisma.user.findUnique({
+        where: {
+          id: supervisorId,
+        },
+        select: {
+          id: true,
+          role: true,
+        },
+      });
+
+      if (!supervisor) {
+        return res.status(404).json({
+          message: "Supervisor not found",
+        });
+      }
+
+      if (supervisor.role !== Role.SUPERVISOR) {
+        return res.status(400).json({
+          message: "User is not a supervisor",
+        });
+      }
+
+      const agents = await prisma.user.findMany({
+        where: {
+          role: Role.AGENT,
+          supervisorId,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          supervisorId: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+
+      return res.status(200).json({
+        agents,
+      });
+    } catch (error) {
+      console.error("Get supervisor agents error:", error);
+
+      return res.status(500).json({
+        message: "Internal server error",
+      });
+    }
+  },
+);
+
+// Get all unassigned agents
+app.get(
+  "/admin/agents/unassigned",
+  AuthMiddleware,
+  RequiredRole(Role.ADMIN),
+  async (req, res) => {
+    try {
+      const agents = await prisma.user.findMany({
+        where: {
+          role: Role.AGENT,
+          supervisorId: null,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+
+      return res.status(200).json({
+        agents,
+      });
+    } catch (error) {
+      console.error(error);
+
+      return res.status(500).json({
+        message: "Internal server error",
+      });
+    }
+  },
+);
+
+//Remove agent from supervisor
+app.delete(
+  "/admin/supervisors/:supervisorId/agents/:agentId",
+  AuthMiddleware,
+  RequiredRole(Role.ADMIN),
+  async (req, res) => {
+    try {
+      const { supervisorId, agentId } = req.params;
+
+      const result = await prisma.user.updateMany({
+        where: {
+          id: agentId as string,
+          role: Role.AGENT,
+          supervisorId,
+        },
+        data: {
+          supervisorId: null,
+        },
+      });
+
+      if (result.count === 0) {
+        return res.status(404).json({
+          message: "Agent is not assigned to this supervisor",
+        });
+      }
+
+      return res.status(200).json({
+        message: "Agent removed from supervisor successfully",
+      });
+    } catch (error) {
+      console.error("Remove agent error:", error);
+
+      return res.status(500).json({
+        message: "Internal server error",
+      });
+    }
+  },
+);
 
 // admin only
 app.get(
@@ -366,32 +806,34 @@ app.get(
         // Open conversations
         prisma.conversation.count({
           where: {
-            status: "OPEN",
+            status: ConversationStatus.OPEN,
           },
         }),
 
         // Closed conversations
         prisma.conversation.count({
           where: {
-            status: "CLOSE",
+            status: ConversationStatus.CLOSE,
           },
         }),
 
         // Supervisor analytics
         prisma.user.findMany({
           where: {
-            role: "SUPERVISOR",
+            role: Role.SUPERVISOR,
           },
           select: {
             id: true,
             name: true,
 
-            supervisorAgents: {
+            // All agents belonging to this supervisor
+            agents: {
               select: {
-                agentId: true,
+                id: true,
               },
             },
 
+            // Conversations assigned to this supervisor
             supervisorConversations: {
               select: {
                 id: true,
@@ -409,12 +851,16 @@ app.get(
         supervisors: supervisors.map((supervisor) => ({
           id: supervisor.id,
           name: supervisor.name,
-          agentCount: supervisor.supervisorAgents.length,
+
+          // Number of agents assigned to supervisor
+          agentCount: supervisor.agents.length,
+
+          // Number of conversations assigned to supervisor
           conversationCount: supervisor.supervisorConversations.length,
         })),
       });
     } catch (error) {
-      console.error(error);
+      console.error("Admin analytics error:", error);
 
       return res.status(500).json({
         message: "Internal server error",
