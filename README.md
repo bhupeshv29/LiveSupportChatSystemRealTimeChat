@@ -53,8 +53,12 @@ Chat is only between the **candidate** and the **assigned agent**. Supervisors a
 
 ```
 apps/fe          React UI
-apps/backend     REST auth, conversations, admin, assign, close
-apps/ws          Realtime join / message / close notify
+  src/pages/{auth,candidate,agent,supervisor,admin,chat}
+  src/hooks/{admin,agent,candidate,supervisor,chat}
+  src/components/{layout,chat,conversation}
+  src/services, context, routes, types
+apps/backend     REST (src/index.ts, middleware, validation, config)
+apps/ws          Realtime (src/ws.ts, auth, rooms, types)
 packages/db      Prisma schema + PostgreSQL client
 packages/common  Shared types
 ```

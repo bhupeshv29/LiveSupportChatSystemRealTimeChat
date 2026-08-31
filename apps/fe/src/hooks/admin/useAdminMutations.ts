@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   assignAgentToSupervisor,
   removeAgentFromSupervisor,
-} from "../services/admin.service";
+} from "../../services/admin.service";
 
 function invalidateAdminOrg(
   queryClient: ReturnType<typeof useQueryClient>,

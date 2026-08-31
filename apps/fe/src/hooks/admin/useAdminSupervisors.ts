@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   getAdminSupervisors,
   getSupervisorAgents,
-} from "../services/admin.service";
+} from "../../services/admin.service";
 
 export function useAdminSupervisors() {
   return useQuery({

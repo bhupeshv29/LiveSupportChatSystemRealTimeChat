@@ -1,16 +1,16 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Login from "./pages/auth/Login";
 import Signup from "./pages/auth/Signup";
-import Unauthorized from "./pages/Unauthorized";
+import Unauthorized from "./pages/auth/Unauthorized";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import RoleRoute from "./routes/RoleRoute";
 import CandidateDashboard from "./pages/candidate/CandidateDashboard";
 import AgentDashboard from "./pages/agent/AgentDashboard";
-import SupervisorDashboard from "./pages/SupervisorDashboard";
+import SupervisorDashboard from "./pages/supervisor/SupervisorDashboard";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminAgents from "./pages/admin/AdminAgents";
 import AdminSupervisors from "./pages/admin/AdminSupervisors";
-import ChatPage from "./pages/Chatpage";
+import ChatPage from "./pages/chat/ChatPage";
 import { useAuth } from "./context/AuthContext";
 import { getRoleHome } from "./types/types";
 

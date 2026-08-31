@@ -1,6 +1,6 @@
-import Navbar from "../../components/Navbar";
+import Navbar from "../../components/layout/Navbar";
 import { useAuth } from "../../context/AuthContext";
-import { useAdminAnalytics } from "../../hooks/useAdminAnalytics";
+import { useAdminAnalytics } from "../../hooks/admin/useAdminAnalytics";
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();

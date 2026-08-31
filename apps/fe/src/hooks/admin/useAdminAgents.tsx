@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getAdminAgents } from "../services/admin.service";
+import { getAdminAgents } from "../../services/admin.service";
 
 export function useAdminAgents() {
   return useQuery({

@@ -18,7 +18,7 @@ import type {
   ClientEvent,
   ServerEvent,
 } from "./types/ws.types";
-import { verifyToken } from "./authCheck/auth.ws";
+import { verifyToken } from "./auth/auth.ws";
 import { prisma, ConversationStatus } from "@repo/db/client";
 import { rooms, broadcast } from "./rooms/room";
 

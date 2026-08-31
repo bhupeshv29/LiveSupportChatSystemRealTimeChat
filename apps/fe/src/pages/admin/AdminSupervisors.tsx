@@ -1,11 +1,11 @@
 import { useState } from "react";
-import Navbar from "../../components/Navbar";
+import Navbar from "../../components/layout/Navbar";
 import { useAuth } from "../../context/AuthContext";
 import {
   useAdminSupervisors,
   useSupervisorAgents,
-} from "../../hooks/useAdminSupervisors";
-import { useRemoveAgentFromSupervisor } from "../../hooks/useAdminMutations";
+} from "../../hooks/admin/useAdminSupervisors";
+import { useRemoveAgentFromSupervisor } from "../../hooks/admin/useAdminMutations";
 
 export default function AdminSupervisors() {
   const { user, logout } = useAuth();

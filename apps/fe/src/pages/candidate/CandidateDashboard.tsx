@@ -1,9 +1,9 @@
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import Navbar from "../../components/Navbar";
+import Navbar from "../../components/layout/Navbar";
 import { useAuth } from "../../context/AuthContext";
-import { useCreateConversation } from "../../hooks/useCreateConversation";
-import { useCandidateConversations } from "../../hooks/useCandidateConversations";
+import { useCreateConversation } from "../../hooks/candidate/useCreateConversation";
+import { useCandidateConversations } from "../../hooks/candidate/useCandidateConversations";
 import { getErrorMessage } from "../../services/api";
 import type { ConversationStatus } from "../../types/types";
 

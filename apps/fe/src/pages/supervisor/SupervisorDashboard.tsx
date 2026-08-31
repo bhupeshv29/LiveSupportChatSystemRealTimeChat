@@ -1,7 +1,7 @@
-import Navbar from "../components/Navbar";
-import AssignAgentSelect from "../components/conversation/AssignAgentSelect";
-import { useAuth } from "../context/AuthContext";
-import { useSupervisorConversations } from "../hooks/useSupervisorConversation";
+import Navbar from "../../components/layout/Navbar";
+import AssignAgentSelect from "../../components/conversation/AssignAgentSelect";
+import { useAuth } from "../../context/AuthContext";
+import { useSupervisorConversations } from "../../hooks/supervisor/useSupervisorConversation";
 
 export default function SupervisorDashboard() {
   const { user, logout } = useAuth();

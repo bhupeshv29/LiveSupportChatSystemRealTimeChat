@@ -1,6 +1,6 @@
 import { type ChangeEvent } from "react";
-import { useAssignConversationAgent } from "../../hooks/useAssignConversationAgent";
-import { useSupervisorTeamAgents } from "../../hooks/useSupervisorTeamAgents";
+import { useAssignConversationAgent } from "../../hooks/supervisor/useAssignConversationAgent";
+import { useSupervisorTeamAgents } from "../../hooks/supervisor/useSupervisorTeamAgents";
 import { getErrorMessage } from "../../services/api";
 
 interface AssignAgentSelectProps {

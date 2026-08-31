@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { getRoleHome, type Role } from "../types/types";
+import { getRoleHome, type Role } from "../../types/types";
 
 interface NavbarProps {
   role: Role;

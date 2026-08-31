@@ -1,7 +1,7 @@
 import ConversationCard from "../../components/conversation/ConversationCard";
-import Navbar from "../../components/Navbar";
+import Navbar from "../../components/layout/Navbar";
 import { useAuth } from "../../context/AuthContext";
-import { useAgentConversations } from "../../hooks/useAgentConversations";
+import { useAgentConversations } from "../../hooks/agent/useAgentConversations";
 
 export default function AgentDashboard() {
   const { user, logout } = useAuth();

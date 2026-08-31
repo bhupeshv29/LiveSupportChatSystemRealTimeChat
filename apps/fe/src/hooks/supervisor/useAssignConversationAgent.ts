@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { assignConversationAgent } from "../services/supervisor.service";
+import { assignConversationAgent } from "../../services/supervisor.service";
 
 export function useAssignConversationAgent() {
   const queryClient = useQueryClient();

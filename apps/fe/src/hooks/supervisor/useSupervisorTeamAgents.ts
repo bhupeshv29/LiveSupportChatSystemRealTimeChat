@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getSupervisorTeamAgents } from "../services/supervisor.service";
+import { getSupervisorTeamAgents } from "../../services/supervisor.service";
 
 export function useSupervisorTeamAgents() {
   return useQuery({

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../../context/AuthContext";
 import type {
   ClientEvent,
   ConversationDetail,
   ServerEvent,
-} from "../types/types";
+} from "../../types/types";
 
 const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8080";
 

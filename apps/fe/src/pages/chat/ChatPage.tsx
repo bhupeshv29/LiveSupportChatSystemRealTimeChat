@@ -1,13 +1,13 @@
 import { useParams } from "react-router-dom";
-import Navbar from "../components/Navbar";
-import ChatWindow from "../components/chat/ChatWindow";
-import ChatInput from "../components/chat/ChatInput";
-import { useAuth } from "../context/AuthContext";
-import { useConversation } from "../hooks/useConversation";
-import { useChatSocket } from "../hooks/useChatSocket";
-import { closeConversation as closeConversationRequest } from "../services/conversation.service";
-import { getErrorMessage } from "../services/api";
-import type { Role } from "../types/types";
+import Navbar from "../../components/layout/Navbar";
+import ChatWindow from "../../components/chat/ChatWindow";
+import ChatInput from "../../components/chat/ChatInput";
+import { useAuth } from "../../context/AuthContext";
+import { useConversation } from "../../hooks/chat/useConversation";
+import { useChatSocket } from "../../hooks/chat/useChatSocket";
+import { closeConversation as closeConversationRequest } from "../../services/conversation.service";
+import { getErrorMessage } from "../../services/api";
+import type { Role } from "../../types/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 

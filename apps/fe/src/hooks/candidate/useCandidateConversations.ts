@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getCandidateConversations } from "../services/conversation.service";
+import { getCandidateConversations } from "../../services/conversation.service";
 
 export function useCandidateConversations() {
   return useQuery({
