@@ -1,159 +1,152 @@
-# Turborepo starter
+# Live Support Chat System
 
-This Turborepo starter is maintained by the Turborepo core team.
+Role-based live support desk: candidates open tickets, supervisors assign agents from their team, agents chat in real time and close threads, and admins manage org structure and analytics.
 
-## Using this example
+This is a Bun + Turborepo monorepo with a React frontend, an Express REST API, a WebSocket chat server, and PostgreSQL (Prisma).
 
-Run the following command:
+## Architecture
 
-```sh
-npx create-turbo@latest
+```mermaid
+flowchart LR
+  subgraph Client
+    FE["React frontend\n(Vite + Tailwind)"]
+  end
+
+  subgraph Servers
+    API["REST API\nExpress :3000"]
+    WS["WebSocket server\nws :8080"]
+  end
+
+  subgraph Data
+    DB[(PostgreSQL)]
+  end
+
+  FE -->|"HTTP + JWT"| API
+  FE -->|"WS + JWT"| WS
+  API --> DB
+  WS --> DB
 ```
 
-## What's inside?
-
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+```mermaid
+flowchart TD
+  C[Candidate] -->|creates ticket| CONV[Conversation OPEN]
+  A[Admin] -->|assigns agent to supervisor| TEAM[Supervisor team 1:1]
+  S[Supervisor] -->|assigns team agent to ticket| CONV
+  AG[Agent] -->|joins room, chats| WS[WebSocket room]
+  C -->|joins room, chats| WS
+  AG -->|closes ticket| CONV2[Conversation CLOSE]
+  CONV --> WS
 ```
 
-Without global `turbo`, use your package manager:
+### Roles (RBAC)
 
-```sh
-cd my-turborepo
-npx turbo build
-bun exec turbo build
-bun exec turbo build
+| Role | What they do |
+| --- | --- |
+| **Candidate** | Sign up, open one support conversation at a time, chat, view history |
+| **Supervisor** | See the open queue, assign an agent from their own team |
+| **Agent** | Chat on assigned open tickets, close a conversation |
+| **Admin** | Assign/unassign agents to supervisors, view analytics |
+
+Chat is only between the **candidate** and the **assigned agent**. Supervisors and admins do not join the live room.
+
+## Monorepo layout
+
+```
+apps/fe          React UI
+apps/backend     REST auth, conversations, admin, assign, close
+apps/ws          Realtime join / message / close notify
+packages/db      Prisma schema + PostgreSQL client
+packages/common  Shared types
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+## Prerequisites
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+- [Bun](https://bun.sh) 1.4+
+- PostgreSQL
+- Same `JWT_SECRET` and `DATABASE_URL` on the API and WebSocket servers
 
-```sh
-turbo build --filter=docs
+## Installation
+
+### 1. Clone and install
+
+```bash
+git clone <repo-url>
+cd LiveSupportChatSystem
+bun install
 ```
 
-Without global `turbo`:
+### 2. Environment files
 
-```sh
-npx turbo build --filter=docs
-bun exec turbo build --filter=docs
-bun exec turbo build --filter=docs
+**`packages/db/.env`** and **`apps/backend/.env`** and **`apps/ws/.env`:**
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/livesupport
+JWT_SECRET=replace-with-a-long-random-string
+PORT=3000
 ```
 
-### Develop
+Use the same `DATABASE_URL` and `JWT_SECRET` in backend and `ws`. Backend defaults to port `3000`; the WebSocket server defaults to `8080` (`PORT` in `apps/ws/.env` if you override it).
 
-To develop all apps and packages, run the following command:
+**`apps/fe/.env`:**
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo dev
+```env
+VITE_API_URL=http://localhost:3000
+VITE_WS_URL=ws://localhost:8080
 ```
 
-Without global `turbo`, use your package manager:
+### 3. Database
 
-```sh
-cd my-turborepo
-npx turbo dev
-bun exec turbo dev
-bun exec turbo dev
+From `packages/db`:
+
+```bash
+cd packages/db
+bun --bun x prisma migrate deploy
+bun --bun x prisma generate
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+For local development you can use `prisma migrate dev` instead of `deploy`.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+### 4. Run the three apps
 
-```sh
-turbo dev --filter=web
+From the repo root, three terminals:
+
+```bash
+bun run --filter backend dev
 ```
 
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-bun exec turbo dev --filter=web
-bun exec turbo dev --filter=web
+```bash
+bun run --filter ws dev
 ```
 
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
+```bash
+bun run --filter fe dev
 ```
 
-Without global `turbo`, use your package manager:
+Or start each app by path:
 
-```sh
-cd my-turborepo
-npx turbo login
-bun exec turbo login
-bun exec turbo login
+```bash
+bun run --cwd apps/backend dev
+bun run --cwd apps/ws dev
+bun run --cwd apps/fe dev
 ```
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+Open the UI at `http://localhost:5173`.
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+Health check: `GET http://localhost:3000/health`.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+## Typical flow
 
-```sh
-turbo link
-```
+1. Sign up as **Admin**, **Supervisor**, **Agent**, and **Candidate** (separate accounts).
+2. Admin attaches each agent to one supervisor (`/admin/agents`).
+3. Candidate starts a conversation.
+4. Supervisor assigns a team agent to that ticket.
+5. Candidate and agent chat; agent can **Close chat**.
+6. Candidate dashboard lists all tickets with agent and Open/Closed status.
 
-Without global `turbo`:
+## Stack
 
-```sh
-npx turbo link
-bun exec turbo link
-bun exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+- **Frontend:** React, React Router, TanStack Query, Axios, Tailwind
+- **API:** Express, Zod, JWT, bcrypt
+- **Realtime:** `ws` (JWT on the query string)
+- **Data:** PostgreSQL, Prisma 7
+- **Tooling:** Bun workspaces, Turborepo

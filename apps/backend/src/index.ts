@@ -5,9 +5,14 @@ import { loginSchema, SignupSchema } from "./validation/authSchema";
 import jwt from "jsonwebtoken";
 import "dotenv/config";
 import AuthMiddleware, { RequiredRole } from "./middleware/auth.middleware";
-
+import cors from "cors";
 const app = express();
 app.use(express.json());
+app.use(
+  cors({
+    origin: "*",
+  }),
+);
 
 const PORT = Number(process.env.PORT || 3000);
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -22,7 +27,7 @@ app.post("/auth/signup", async (req: Request, res: Response) => {
     const parsedData = SignupSchema.safeParse(req.body);
 
     if (!parsedData.success) {
-      return res.json({
+      return res.status(400).json({
         message: "invalid data",
       });
     }
@@ -40,7 +45,7 @@ app.post("/auth/signup", async (req: Request, res: Response) => {
     });
 
     if (existingUser) {
-      return res.json("user already exist ");
+      return res.status(409).json({ message: "user already exist" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 4);
@@ -78,7 +83,7 @@ app.post("/auth/login", async (req: Request, res: Response) => {
   try {
     const parsedData = loginSchema.safeParse(req.body);
     if (!parsedData.success) {
-      return res.json({
+      return res.status(400).json({
         message: "invalid input data",
       });
     }
@@ -91,25 +96,31 @@ app.post("/auth/login", async (req: Request, res: Response) => {
       },
     });
 
+    if (!users) {
+      return res.status(401).json({ message: "invalid input data" });
+    }
+
     const isPasswordCorrect = await bcrypt.compare(
       password,
-      users?.password_hash as string,
+      users.password_hash,
     );
 
     if (!isPasswordCorrect) {
-      return res.json({ message: "invalid input data" });
+      return res.status(401).json({ message: "invalid input data" });
     }
 
     const token = jwt.sign(
-      { userId: users?.id, userRole: users?.role },
+      { userId: users.id, userRole: users.role },
       JWT_SECRET as string,
     );
 
     res.json({
       token,
       user: {
-        id: users?.id,
-        Role: users?.role,
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
       },
     });
   } catch (error) {
@@ -128,7 +139,7 @@ app.get("/auth/me", AuthMiddleware, async (req: Request, res: Response) => {
   });
 
   if (!users) {
-    return res.json({ message: "server errror" });
+    return res.status(404).json({ message: "server errror" });
   }
 
   return res.json({
@@ -161,22 +172,77 @@ app.post(
         });
       }
 
-      const conversations = await prisma.conversation.create({
+      const conversation = await prisma.conversation.create({
         data: {
           candidateId: req.userId,
         },
+        select: {
+          id: true,
+          candidateId: true,
+          supervisorId: true,
+          agentId: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
 
-      return res.json({
-        conversationId: conversations.id,
-        candidateId: conversations.candidateId,
-        status: conversations.status,
-      });
+      return res.status(201).json(conversation);
     } catch (error) {
       console.error(error);
 
       return res.status(409).json({
         message: "One conversation is already open",
+      });
+    }
+  },
+);
+
+// Candidate gets their own conversations
+app.get(
+  "/conversation",
+  AuthMiddleware,
+  RequiredRole(Role.CANDIDATE),
+  async (req: Request, res: Response) => {
+    try {
+      const conversations = await prisma.conversation.findMany({
+        where: {
+          candidateId: req.userId,
+        },
+        select: {
+          id: true,
+          candidateId: true,
+          supervisorId: true,
+          agentId: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+
+          agent: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+
+          supervisor: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          updatedAt: "desc",
+        },
+      });
+
+      return res.status(200).json(conversations);
+    } catch (error) {
+      console.error("Get candidate conversations error:", error);
+
+      return res.status(500).json({
+        message: "Internal server error",
       });
     }
   },
@@ -233,6 +299,11 @@ app.get(
               senderId: true,
               content: true,
               createdAt: true,
+              sender: {
+                select: {
+                  name: true,
+                },
+              },
             },
           },
         },
@@ -250,7 +321,13 @@ app.get(
         candidate: conversation.candidate,
         agent: conversation.agent,
         supervisor: conversation.supervisor,
-        messages: conversation.message,
+        messages: conversation.message.map((item) => ({
+          id: item.id,
+          senderId: item.senderId,
+          content: item.content,
+          createdAt: item.createdAt,
+          senderName: item.sender.name,
+        })),
       });
     } catch (error) {
       console.error("Get conversation error:", error);
@@ -414,6 +491,39 @@ app.get(
   },
 );
 
+app.get(
+  "/supervisor/agents",
+  AuthMiddleware,
+  RequiredRole(Role.SUPERVISOR),
+  async (req, res) => {
+    try {
+      const agents = await prisma.user.findMany({
+        where: {
+          role: Role.AGENT,
+          supervisorId: req.userId,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+
+      return res.status(200).json({ agents });
+    } catch (error) {
+      console.error("Supervisor agents error:", error);
+
+      return res.status(500).json({
+        message: "Internal server error",
+      });
+    }
+  },
+);
+
 //agents sees open/closed conversations
 
 app.get(
@@ -464,7 +574,54 @@ app.get(
   },
 );
 
-//close conversation using ws
+// agent closes an assigned conversation
+app.post(
+  "/conversation/:id/close",
+  AuthMiddleware,
+  RequiredRole(Role.AGENT),
+  async (req, res) => {
+    try {
+      const conversationId = String(req.params.id);
+
+      const result = await prisma.conversation.updateMany({
+        where: {
+          id: conversationId,
+          agentId: req.userId,
+          status: ConversationStatus.OPEN,
+        },
+        data: {
+          status: ConversationStatus.CLOSE,
+          closedAt: new Date(),
+        },
+      });
+
+      if (result.count === 0) {
+        return res.status(409).json({
+          message: "Conversation cannot be closed",
+        });
+      }
+
+      const conversation = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: {
+          id: true,
+          status: true,
+          closedAt: true,
+        },
+      });
+
+      return res.status(200).json(conversation);
+    } catch (error) {
+      console.error("Close conversation error:", error);
+
+      return res.status(500).json({
+        message: "Internal server error",
+      });
+    }
+  },
+);
+
+//close conversation using ws (live notify)
 
 //admin gets all the agents
 app.get(
@@ -509,39 +666,34 @@ app.get(
 
 // admin gets all the supervisor
 app.get(
-  "admin/supervisors",
+  "/admin/supervisors",
   AuthMiddleware,
   RequiredRole(Role.ADMIN),
   async (req, res) => {
     try {
       const supervisors = await prisma.user.findMany({
         where: {
-          role: Role.AGENT,
+          role: Role.SUPERVISOR,
         },
         select: {
           id: true,
           name: true,
           email: true,
-          supervisorId: true,
-          supervisor: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
         },
         orderBy: {
           name: "asc",
         },
       });
 
-      if (!supervisors) {
-        return res.json("no supervisor is available");
-      }
-
-      res.json({ supervisors });
+      return res.status(200).json({
+        supervisors,
+      });
     } catch (error) {
-      res.json("someting went wrong");
+      console.error("Get supervisors error:", error);
+
+      return res.status(500).json({
+        message: "Internal server error",
+      });
     }
   },
 );

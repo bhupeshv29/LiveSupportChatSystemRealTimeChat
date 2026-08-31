@@ -19,8 +19,8 @@ import type {
   ServerEvent,
 } from "./types/ws.types";
 import { verifyToken } from "./authCheck/auth.ws";
-import { prisma } from "@repo/db/client";
-import { rooms } from "./rooms/room";
+import { prisma, ConversationStatus } from "@repo/db/client";
+import { rooms, broadcast } from "./rooms/room";
 
 const PORT = Number(process.env.PORT || 8080);
 
@@ -111,7 +111,15 @@ wss.on("connection", async (ws: AuthenticatedSocket, req) => {
           return;
         }
 
-        // Check user belongs to conversation
+        if (conversation.status === "CLOSE") {
+          const event: ServerEvent = {
+            type: "CONVERSATION_CLOSED",
+            conversationId,
+          };
+
+          ws.send(JSON.stringify(event));
+          return;
+        }
 
         const isCandidate = conversation.candidateId === ws.userId;
 
@@ -128,30 +136,16 @@ wss.on("connection", async (ws: AuthenticatedSocket, req) => {
           return;
         }
 
-        // Create room if needed
-
         if (!rooms[conversationId]) {
           rooms[conversationId] = [];
         }
 
-        // Prevent duplicate socket
-
-        const alreadyJoined = rooms[conversationId].some(
-          (socket) => socket === ws,
+        rooms[conversationId] = rooms[conversationId].filter(
+          (socket) =>
+            socket !== ws &&
+            socket.userId !== ws.userId &&
+            socket.readyState === WebSocket.OPEN,
         );
-
-        if (alreadyJoined) {
-          const event: ServerEvent = {
-            type: "ERROR",
-            message: "Already joined conversation",
-          };
-
-          ws.send(JSON.stringify(event));
-
-          return;
-        }
-
-        // Maximum 2 sockets
 
         if (rooms[conversationId].length >= 2) {
           const event: ServerEvent = {
@@ -164,11 +158,7 @@ wss.on("connection", async (ws: AuthenticatedSocket, req) => {
           return;
         }
 
-        // Add socket to room
-
         rooms[conversationId].push(ws);
-
-        // Store conversation on socket
         ws.conversationId = conversationId;
 
         console.log(`${ws.userId} joined ${conversationId}`);
@@ -249,6 +239,16 @@ wss.on("connection", async (ws: AuthenticatedSocket, req) => {
           return;
         }
 
+        if (conversation.status === "CLOSE") {
+          const event: ServerEvent = {
+            type: "CONVERSATION_CLOSED",
+            conversationId,
+          };
+
+          ws.send(JSON.stringify(event));
+          return;
+        }
+
         // Authorization
 
         const allowed =
@@ -274,30 +274,79 @@ wss.on("connection", async (ws: AuthenticatedSocket, req) => {
             senderId: ws.userId!,
             content: content.trim(),
           },
+          include: {
+            sender: {
+              select: {
+                name: true,
+              },
+            },
+          },
         });
-
-        // Create typed server event
 
         const newMessageEvent: ServerEvent = {
           type: "NEW_MESSAGE",
-
           message: {
             id: savedMessage.id,
             conversationId: savedMessage.conversationId,
             senderId: savedMessage.senderId,
+            senderName: savedMessage.sender.name,
             content: savedMessage.content,
             createdAt: savedMessage.createdAt,
           },
         };
 
-        // Broadcast
+        broadcast(conversationId, newMessageEvent);
 
-        rooms[conversationId]?.forEach((socket) => {
-          if (socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify(newMessageEvent));
-          }
+        return;
+      }
+
+      if (message.type === "CLOSE_CONVERSATION") {
+        const conversationId = message.conversationId;
+
+        const conversation = await prisma.conversation.findUnique({
+          where: { id: conversationId },
         });
 
+        if (!conversation) {
+          const event: ServerEvent = {
+            type: "ERROR",
+            message: "Conversation not found",
+          };
+
+          ws.send(JSON.stringify(event));
+          return;
+        }
+
+        const isAssignedAgent =
+          ws.role === "AGENT" && conversation.agentId === ws.userId;
+
+        if (!isAssignedAgent) {
+          const event: ServerEvent = {
+            type: "ERROR",
+            message: "Only the assigned agent can close this conversation",
+          };
+
+          ws.send(JSON.stringify(event));
+          return;
+        }
+
+        if (conversation.status === ConversationStatus.OPEN) {
+          await prisma.conversation.update({
+            where: { id: conversationId },
+            data: {
+              status: ConversationStatus.CLOSE,
+              closedAt: new Date(),
+            },
+          });
+        }
+
+        const closedEvent: ServerEvent = {
+          type: "CONVERSATION_CLOSED",
+          conversationId,
+        };
+
+        ws.send(JSON.stringify(closedEvent));
+        broadcast(conversationId, closedEvent);
         return;
       }
 

@@ -1,13 +1,11 @@
 import { WebSocket } from "ws";
 
-export type Role = "CANDIDATE" | "AGENT";
+export type Role = "CANDIDATE" | "AGENT" | "SUPERVISOR" | "ADMIN";
 
 export type JwtPayload = {
   userId: string;
   role: Role;
 };
-
-// CLIENT → SERVER EVENTS
 
 export type ClientEvent =
   | {
@@ -22,9 +20,11 @@ export type ClientEvent =
   | {
       type: "LEAVE_CONVERSATION";
       conversationId: string;
+    }
+  | {
+      type: "CLOSE_CONVERSATION";
+      conversationId: string;
     };
-
-// SERVER → CLIENT EVENTS
 
 export type ServerEvent =
   | {
@@ -47,6 +47,7 @@ export type ServerEvent =
         id: string;
         conversationId: string;
         senderId: string;
+        senderName: string;
         content: string;
         createdAt: Date;
       };
@@ -56,11 +57,13 @@ export type ServerEvent =
       userId: string;
     }
   | {
+      type: "CONVERSATION_CLOSED";
+      conversationId: string;
+    }
+  | {
       type: "ERROR";
       message: string;
     };
-
-// AUTHENTICATED SOCKET
 
 export type AuthenticatedSocket = WebSocket & {
   userId?: string;

@@ -16,7 +16,7 @@ export default function AuthMiddleware(
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader?.startsWith("Bearer ")) {
-      return res.json({ message: "Authentication required" });
+      return res.status(401).json({ message: "Authentication required" });
     }
 
     const token = authHeader.split(" ")[1];
@@ -29,7 +29,7 @@ export default function AuthMiddleware(
     next();
   } catch (error) {
     console.log(error);
-    res.json({ message: "invalid or expired token" });
+    res.status(401).json({ message: "invalid or expired token" });
   }
 }
 
@@ -37,7 +37,7 @@ export default function AuthMiddleware(
 export const RequiredRole = (...allowedRoles: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!allowedRoles.includes(req.role)) {
-      return res.json({ message: "Forbidden" });
+      return res.status(403).json({ message: "Forbidden" });
     }
 
     next();
