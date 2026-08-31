@@ -1,0 +1,11 @@
+{
+  "installCommand": "bun install",
+  "buildCommand": "bun run --filter fe build",
+  "outputDirectory": "apps/fe/dist",
+  "rewrites": [
+    {
+      "source": "/((?!assets/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
