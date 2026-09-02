@@ -5,19 +5,13 @@ import type {
 } from "../types/types";
 import api from "./api";
 
-export async function getCandidateConversations(): Promise<
-  CandidateConversation[]
-> {
+export async function getCandidateConversations(): Promise<CandidateConversation[]> {
   const response = await api.get<CandidateConversation[]>("/conversation");
   return Array.isArray(response.data) ? response.data : [];
 }
 
-export async function getConversation(
-  conversationId: string,
-): Promise<ConversationDetail> {
-  const response = await api.get<ConversationDetail>(
-    `/conversation/${conversationId}`,
-  );
+export async function getConversation(conversationId: string,): Promise<ConversationDetail> {
+  const response = await api.get<ConversationDetail>(`/conversation/${conversationId}`);
   return response.data;
 }
 
