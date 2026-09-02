@@ -18,9 +18,7 @@ export async function getAdminAgents(): Promise<AdminAgent[]> {
   return response.data.agents;
 }
 
-// -------------------------
 // Supervisors
-// -------------------------
 
 export async function getAdminSupervisors(): Promise<AdminSupervisor[]> {
   const response = await api.get<{ supervisors: AdminSupervisor[] }>(
@@ -30,42 +28,29 @@ export async function getAdminSupervisors(): Promise<AdminSupervisor[]> {
   return response.data.supervisors;
 }
 
-export async function getSupervisorAgents(
-  supervisorId: string,
-): Promise<AdminAgent[]> {
-  const response = await api.get<{ agents: AdminAgent[] }>(
-    `/admin/supervisors/${supervisorId}/agents`,
-  );
+export async function getSupervisorAgents(supervisorId: string): Promise<AdminAgent[]> {
+  const response = await api.get<{ agents: AdminAgent[] }>(`/admin/supervisors/${supervisorId}/agents`);
 
   return response.data.agents;
 }
 
-// -------------------------
 // Assignment
-// -------------------------
 
 export async function assignAgentToSupervisor(
   supervisorId: string,
   agentId: string,
 ) {
-  const response = await api.post(
-    `/admin/supervisors/${supervisorId}/agents/${agentId}`,
-  );
-
+  const response = await api.post(`/admin/supervisors/${supervisorId}/agents/${agentId}`);
   return response.data;
 }
 
-// -------------------------
 // Remove assignment
-// -------------------------
 
 export async function removeAgentFromSupervisor(
   supervisorId: string,
   agentId: string,
 ) {
-  const response = await api.delete(
-    `/admin/supervisors/${supervisorId}/agents/${agentId}`,
-  );
+  const response = await api.delete(`/admin/supervisors/${supervisorId}/agents/${agentId}`);
 
   return response.data;
 }
