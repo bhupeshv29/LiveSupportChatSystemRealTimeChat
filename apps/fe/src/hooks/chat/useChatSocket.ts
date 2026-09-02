@@ -141,8 +141,14 @@ export function useChatSocket(
       socketRef.current = null;
     };
 
+
+
+    //useEffect cleaning 
+
     return () => {
       if (socket.readyState === WebSocket.OPEN) {
+
+
         const leave: ClientEvent = {
           type: "LEAVE_CONVERSATION",
           conversationId,
@@ -188,6 +194,8 @@ export function useChatSocket(
     return true;
   }
 
+
+  // useSocket return
   return {
     isConnected,
     isClosed,

@@ -32,13 +32,12 @@ export default function ChatPage({ role }: ChatPageProps) {
 
   const {
     isConnected,
-    isClosed,
     error: socketError,
     sendMessage,
     closeConversation,
   } = useChatSocket(conversationId, Boolean(conversationId) && isOpen);
 
-  const conversationClosed = conversation?.status === "CLOSE" || isClosed;
+  const conversationClosed = conversation?.status === "CLOSE";
   const canChat =
     !conversationClosed && Boolean(conversation?.agent) && isConnected;
   const canClose = role === "AGENT" && !conversationClosed;
