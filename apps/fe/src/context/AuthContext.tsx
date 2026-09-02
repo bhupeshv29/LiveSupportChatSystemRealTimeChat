@@ -21,15 +21,10 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
 
-export function AuthProvider({ children }: AuthProviderProps) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-
   const [token, setToken] = useState<string | null>(null);
-
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

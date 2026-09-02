@@ -4,31 +4,19 @@ import {
   removeAgentFromSupervisor,
 } from "../../services/admin.service";
 
-function invalidateAdminOrg(
-  queryClient: ReturnType<typeof useQueryClient>,
-  supervisorId: string,
-) {
-  queryClient.invalidateQueries({ queryKey: ["admin", "agents"] });
-  queryClient.invalidateQueries({ queryKey: ["admin", "supervisors"] });
-  queryClient.invalidateQueries({
-    queryKey: ["admin", "supervisors", supervisorId, "agents"],
-  });
-  queryClient.invalidateQueries({ queryKey: ["admin", "analytics"] });
-}
+type AgentSupervisorIds = {
+  supervisorId: string;
+  agentId: string;
+};
 
 export function useAssignAgentToSupervisor() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      supervisorId,
-      agentId,
-    }: {
-      supervisorId: string;
-      agentId: string;
-    }) => assignAgentToSupervisor(supervisorId, agentId),
-    onSuccess: (_, variables) => {
-      invalidateAdminOrg(queryClient, variables.supervisorId);
+    mutationFn: ({ supervisorId, agentId }: AgentSupervisorIds) =>
+      assignAgentToSupervisor(supervisorId, agentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin"] });
     },
   });
 }
@@ -37,15 +25,10 @@ export function useRemoveAgentFromSupervisor() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      supervisorId,
-      agentId,
-    }: {
-      supervisorId: string;
-      agentId: string;
-    }) => removeAgentFromSupervisor(supervisorId, agentId),
-    onSuccess: (_, variables) => {
-      invalidateAdminOrg(queryClient, variables.supervisorId);
+    mutationFn: ({ supervisorId, agentId }: AgentSupervisorIds) =>
+      removeAgentFromSupervisor(supervisorId, agentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin"] });
     },
   });
 }
