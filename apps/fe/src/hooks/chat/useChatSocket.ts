@@ -9,6 +9,15 @@ import type {
 
 const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8080";
 
+function send(socket: WebSocket, event: ClientEvent) {
+  if (socket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+
+  socket.send(JSON.stringify(event));
+  return true;
+}
+
 export function useChatSocket(
   conversationId: string | undefined,
   enabled = true,
@@ -16,147 +25,87 @@ export function useChatSocket(
   const queryClient = useQueryClient();
   const { token } = useAuth();
   const socketRef = useRef<WebSocket | null>(null);
-  const joinedRef = useRef(false);
+  const closedRef = useRef(false);
 
   const [isConnected, setIsConnected] = useState(false);
-  const [isClosed, setIsClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!enabled || !conversationId || !token) {
-      if (!token && conversationId && enabled) {
-        setError("Not authenticated");
-      }
+    if (!enabled || !conversationId) {
+      return;
+    }
+
+    if (!token) {
+      setError("Not authenticated");
       return;
     }
 
     setError(null);
-    setIsClosed(false);
-    joinedRef.current = false;
+    closedRef.current = false;
 
     const socket = new WebSocket(
       `${WS_URL}?token=${encodeURIComponent(token)}`,
     );
-
     socketRef.current = socket;
 
-    function join() {
-      if (
-        joinedRef.current ||
-        socket.readyState !== WebSocket.OPEN ||
-        !conversationId
-      ) {
-        return;
-      }
-
-      joinedRef.current = true;
-
-      const event: ClientEvent = {
-        type: "JOIN_CONVERSATION",
-        conversationId,
-      };
-
-      socket.send(JSON.stringify(event));
-    }
-
-    function markClosed() {
-      setIsClosed(true);
+    function patchConversation(
+      updater: (conversation: ConversationDetail) => ConversationDetail,
+    ) {
       queryClient.setQueryData(
         ["conversation", conversationId],
-        (oldConversation: ConversationDetail | undefined) => {
-          if (!oldConversation) {
-            return oldConversation;
-          }
-
-          return {
-            ...oldConversation,
-            status: "CLOSE" as const,
-          };
-        },
+        (old: ConversationDetail | undefined) => (old ? updater(old) : old),
       );
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      queryClient.invalidateQueries({ queryKey: ["agent-conversations"] });
     }
 
-    socket.onopen = () => {
-      setIsConnected(true);
-      join();
-    };
+    socket.onopen = () => setIsConnected(true);
 
     socket.onmessage = (event) => {
       const data: ServerEvent = JSON.parse(event.data);
 
-      switch (data.type) {
-        case "AUTHENTICATED":
-          join();
-          break;
+      if (data.type === "AUTHENTICATED") {
+        send(socket, { type: "JOIN_CONVERSATION", conversationId });
+        return;
+      }
 
-        case "JOINED_CONVERSATION":
-          setError(null);
-          break;
+      if (data.type === "NEW_MESSAGE") {
+        patchConversation((conversation) => {
+          if (conversation.messages?.some((m) => m.id === data.message.id)) {
+            return conversation;
+          }
 
-        case "NEW_MESSAGE":
-          queryClient.setQueryData(
-            ["conversation", conversationId],
-            (oldConversation: ConversationDetail | undefined) => {
-              if (!oldConversation) {
-                return oldConversation;
-              }
+          return {
+            ...conversation,
+            messages: [...(conversation.messages ?? []), data.message],
+          };
+        });
+        return;
+      }
 
-              const exists = oldConversation.messages?.some(
-                (message) => message.id === data.message.id,
-              );
+      if (data.type === "CONVERSATION_CLOSED") {
+        closedRef.current = true;
+        patchConversation((conversation) => ({
+          ...conversation,
+          status: "CLOSE",
+        }));
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        queryClient.invalidateQueries({ queryKey: ["agent-conversations"] });
+        return;
+      }
 
-              if (exists) {
-                return oldConversation;
-              }
-
-              return {
-                ...oldConversation,
-                messages: [...(oldConversation.messages ?? []), data.message],
-              };
-            },
-          );
-          break;
-
-        case "CONVERSATION_CLOSED":
-          markClosed();
-          break;
-
-        case "ERROR":
-          setError(data.message);
-          break;
-
-        default:
-          break;
+      if (data.type === "ERROR") {
+        setError(data.message);
       }
     };
 
-    socket.onerror = () => {
-      setError("WebSocket connection failed");
-    };
+    socket.onerror = () => setError("WebSocket connection failed");
 
     socket.onclose = () => {
       setIsConnected(false);
       socketRef.current = null;
     };
 
-
-
-    //useEffect cleaning 
-
     return () => {
-      if (socket.readyState === WebSocket.OPEN) {
-
-
-        const leave: ClientEvent = {
-          type: "LEAVE_CONVERSATION",
-          conversationId,
-        };
-
-        socket.send(JSON.stringify(leave));
-      }
-
+      send(socket, { type: "LEAVE_CONVERSATION", conversationId });
       socket.close();
       socketRef.current = null;
     };
@@ -164,41 +113,24 @@ export function useChatSocket(
 
   function sendMessage(content: string) {
     const socket = socketRef.current;
-
-    if (!socket || socket.readyState !== WebSocket.OPEN || isClosed) {
+    if (!socket || !conversationId || closedRef.current) {
       return;
     }
 
-    const event: ClientEvent = {
-      type: "SEND_MESSAGE",
-      conversationId: conversationId!,
-      content,
-    };
-
-    socket.send(JSON.stringify(event));
+    send(socket, { type: "SEND_MESSAGE", conversationId, content });
   }
 
   function closeConversation() {
     const socket = socketRef.current;
-
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
+    if (!socket || !conversationId) {
       return false;
     }
 
-    const event: ClientEvent = {
-      type: "CLOSE_CONVERSATION",
-      conversationId: conversationId!,
-    };
-
-    socket.send(JSON.stringify(event));
-    return true;
+    return send(socket, { type: "CLOSE_CONVERSATION", conversationId });
   }
 
-
-  // useSocket return
   return {
     isConnected,
-    isClosed,
     error,
     sendMessage,
     closeConversation,
